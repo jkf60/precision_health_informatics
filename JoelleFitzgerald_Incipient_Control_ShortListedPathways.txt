@@ -1,0 +1,7 @@
+protein polymerization (GO:0051258),
+cAMP signaling pathway, 
+Neuronal System R-HAS-112316, 
+Cognitive Function,
+TGF beta signaling,
+Brain-derived neurotrophic factor (BDNF) signaling pathway WP2380,
+maintenance of blood-brain barrier (GO:0035633)
