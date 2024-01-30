@@ -1,0 +1,266 @@
+---
+title: "JoelleFitzgerald-Team1-Step1"
+author: "Joelle Fitzgerald"
+date: "11/20/2022"
+output: html_document
+---
+
+## HIDS-503_2022 Final Project Step 1: Immuno-Oncology applications of genomic data
+
+Disease Type: Bladder Cancer
+Data Type: Gene expression
+
+Task: to explore molecular changes and identify potential biomarkers at different stages of
+cancer in comparison to normal tissue, as well as differences in immune cells types that have
+infiltrated tumors.
+
+Major Steps:
+1. Compare differences in gene expression between a given stage of cancer and normal tissue i.e. Differential Gene Expression analysis using Ttest in R (group comparison)
+2. Explore list of DEGs using Pathway enrichment and Gene ontology enrichment analysis ( Systems Biology Analysis of DEGs in R)
+3. Immuno-Oncology analysis: new type of analysis using gene expression data and CIBERSORT package on-line
+4. Compare results of pathway analysis and CIBERSORT analysis
+5. Select important and relevant tumor related and immune related pathways, immune
+cells types and top ranked DEGs and discuss relevance of your findings in a context of Bladder cancer diagnostics and treatment from Immuno-Oncology prospective
+
+## Final Project Part 1: Gene Expression Analysis, Welch's T-Test
+
+### Given: 
+Bladder Cancer patient dataset of clinical and gene expression data 
+ 
+  * Clinical data with 233 patients
+  * Gene expression data with 233 patients
+
+Team 1: Comparison of Pre-cancerous tissue (called “Bladder Cancer Surrounding 
+Mucosa”) vs Normal tissue
+  
+## Step 0 
+* Open clinical data file in excel (if possible) to get familiar with the data. Run the following checks:
+    + Rows are patients. 
+    + Columns are clinical attributes
+    + There is one row per patient
+    + Check/Notice the Number of rows and number of columns
+    + All data must be de-identified
+
+* Ensure gene expression data is cleaned (no missing or inaccurate data)
+
+## Step 1 - Read in data into R. Check if data was imported correctly
+* Read clinical data into R
+    + General Checks 
+    + Rows are patients
+    + Columns are clinical attributes
+    + There is one row per patient
+    + How many patients are there (dimensions of the data frame)
+    + Find the column which is your outcome of interest
+    + What are the groups to compare ?
+* Read in cleaned processed molecular data into R
+    + Check dimensions of the data frame
+    + Rows are molecular features/variables (genes in our example)
+    + Columns are patients
+* Repeat for each molecular data type
+
+### Step 1a - Read in clinical data
+
+```{r}
+
+clinData <- read.csv(file = "input/20191105_BC_ClinData_233rows.csv")
+knitr::kable(head(clinData[,1:4],n = 5))
+
+```
+
+### Step 1b: Read in processed normalized gene expression data in log2 scale, includes gene annotation 
+
+```{r}
+
+geneExp <- read.csv(file = "input/20191105_BC_GeneExpData_withAnno_233.tsv",
+                       sep="\t", 
+                       header = T, 
+                       stringsAsFactors = F, row.names = 1)
+knitr::kable(geneExp[1:5, 1:4], caption = "Processed gene expression data in log2 scale with gene annotation")
+
+```
+
+### Comparison and Baseline Groups
+
+* Question: What is the outcome variable column from clinical data file? 
+* Answer: "PrimaryBladderCancerType" column has values "Normal bladder mucosae" (baseline group) and "Bladder mucosae surrounding cancer" (comparison group)
+
+        - Comparison group: Bladder mucosae surrounding cancer
+        - Baseline group: Normal bladder mucosae
+        
+```{r}
+#Returns the value and frequency of 'Bladder mucosae surrounding cancer', 'Normal bladder mucosae', 'Primary_BC_Invasive', and 'Primary_BC_Superficial' in ClinData data set
+
+knitr::kable(table(clinData$PrimaryBladderCancerType)) # 58 'Bladder mucosae surrounding cancer' samples (comparison), 10 'Normal bladder mucosae' samples (baseline)
+
+```
+
+## Step 2 - Clean/Filter data
+### Filter clinical data 
+
+Clinical data has one row per patient, but only compare normal bladder mucosae and bladder mucosae surrounding cancer samples, so we need to subset ClinData.
+
+```{r}
+dim(clinData)
+```
+
+```{r}
+
+subsetClinData <- clinData[which(clinData$PrimaryBladderCancerType=='Normal bladder mucosae' | clinData$PrimaryBladderCancerType=='Bladder mucosae surrounding cancer'), ]
+
+head(subsetClinData) # 68 total samples (comparison (58 samples) and baseline (10 samples))
+  
+```
+
+### Filter gene expression data
+
+Check rows and columns:
+* Rows are features 
+* Columns are patients (GSMid)
+
+```{r}
+#Finding matching samples for baseline and comparison groups across the two data frames and assigning them to new variables 
+matchingSamples <- which(colnames(geneExp) %in% clinData$GSMid) #233 matching samples between 
+
+#233 matching samples subset
+subsetGeneExp <- geneExp[, matchingSamples] 
+
+```
+
+## Step 3 - Identify the groups to be compared
+
+### Identify the groups to be compared (Baseline and Comparison Grps)
+
+```{r}
+# Labels (row numbers) that can identify the baseline group patients
+baselineLabels <-  which(clinData$PrimaryBladderCancerType == "Normal bladder mucosae") 
+head(baselineLabels) #10 samples
+
+# Use the labels (row numbers) to subset baseline patients in clinical data file 
+clinBase <- clinData[baselineLabels, ] 
+
+# Labels (row numbers) that can identify the comp group patients
+compLabels <- which(clinData$PrimaryBladderCancerType == "Bladder mucosae surrounding cancer") 
+# 58 samples
+head(compLabels)
+
+# Use the labels (row numbers) to subset comp patients in clinical data file 
+clinComp <- clinData[compLabels, ] # 22 samples
+
+#### Use the clinBase and clinComp objects to subset gene expression data
+geneExpBase <- subsetGeneExp[, clinBase$GSMid] # 10 samples
+head(geneExpBase)
+
+geneExpComp <- subsetGeneExp[, clinComp$GSMid] # 58 samples 
+head(geneExpComp)
+
+
+```
+
+## Step 4 - Sanity check
+
+* See if filtering of clinical data in R matches filtering of clinical data in excel
+* See if sample ids in clinical data match sample ids in gene exp data (if they don't match it means your step 1 and/or 2 is wrong)
+* Verify you see correct number of samples in baseline and comp groups
+* Export the column names from gene expression data to see if it contains only gene feature names and no other garbage
+
+```{r}
+#See if sample ids in clinical data match sample ids in gene exp data
+clinBase$GSMid == colnames(geneExpBase)
+clinComp$GSMid== colnames(geneExpComp)
+
+### Checking if the samples IDs baseline and comp groups are the same ---- you can put these in an excel to see if IDs match
+write.table(clinBase$GSMid , file = "output/Joelle_Fitzgerald_ClinBaseIDs.tsv", sep="\t", quote = F  )
+write.table(clinComp$GSMid , file = "output/Joelle_Fitzgerald_ClinCompIDs.tsv", sep="\t", quote = F  )
+write.table(colnames(geneExpBase) , 
+            file = "output/Joelle_Fitzgerald_GeneExpBaseIDs.tsv", 
+            sep="\t", quote = F  )
+write.table(colnames(geneExpComp) , 
+            file = "output/Joelle_Fitzgerald_GeneExpCompIDs.tsv", 
+            sep="\t", quote = F  )
+
+#Export the features from gene expression data  
+#Open this file and check that it contains only gene names and no other garbage
+write.table(rownames(subsetGeneExp),file = "output/genExpFeatureIDsCheck.tsv", sep="\t", quote = F  )
+
+```
+
+## Step 5 - Prep data for T-test
+
+* Molecular data must have features (genes) as rows, and samples as columns.
+* Objects must be data frame
+* Numeric data only
+
+4. CSV file results of T-test obtained from above step (obtained by sorting on p-value)
+5. A text document that contains only the top 20 genes 
+
+```{r}
+### Checking to make sure data is a numeric data frame
+knitr::kable(head(geneExpBase[1:5,1:4]))
+knitr::kable(head(geneExpComp[1:5,1:4]))
+```
+
+#### Function for T-test
+
+```{r ttest}
+source("input/fnTTest.R")
+
+#### Call T-test function
+results1 = fnTTest(baseGroup = geneExpBase, 
+                   compGroup = geneExpComp, 
+                   toolN = "JoelleFitzgerald_", 
+                   baseGroupName = "Team1_",
+                   compGroupName =  "Step1_Ttest_",
+                   folderName = "output")
+```
+
+*The output of the T-Test analysis is a CSV File , and will be located in the folder Name that you provided in the previous step. Locate this file.*
+
+# Next Step - Sub-set top differentially expressed genes
+
+Cleared workspace & read in the T-Test results file.
+
+```{r}
+#Read in the T-Test results file
+ttestResults <- read.csv(file = "output/JoelleFitzgerald_Team1_Step1_Ttest.csv")
+
+#check to make sure p-value column is imported as numeric 
+#sort by p-value (just in case the results are not sorted by p-value)
+ttestResultsSorted <- dplyr::arrange(ttestResults, Pvalue)
+
+#find rows with p-value < 0.01
+whichSig <- which(ttestResultsSorted$Pvalue <= 0.01) 
+
+#Short list sig results
+ttestResultsSig <- ttestResultsSorted[whichSig, ] #719 rows with 17 variables
+
+### Export short listed results
+write.table(x = ttestResultsSig, 
+            file = "output/Joelle_Fitzgerald_Step1_Ttest_Shortlisted.tsv", 
+            quote = F, sep = "\t")
+
+##### First column is a list of features in this format : ID|PrimaryBladderCancerType. 
+#### Use string split strsplit() function to extract gene names
+funcSplit <- function(featureX) {
+  f1 <- unlist(strsplit(x = featureX, split = "|", fixed = TRUE))
+  f2 <- f1[2]
+  return(f2)
+}
+
+# Use apply() function to run the split on every row, its faster version of a loop
+Status1 <- apply(X = as.matrix(ttestResultsSig$Feature), 
+                    MARGIN = 1, FUN = funcSplit)
+
+head(Status1) # Visual of split function results for disease status & corresponding genes
+
+#print length of short listed gene names,  results
+length(Status1)
+
+### Export list of top 20 gene names
+write.table(x = head(Status1,20), 
+            file = "output/Joelle_Fitzgerald_Step1_SigDiff.tsv", 
+            quote = F, sep = "\t")
+
+ 
+```
+
+
